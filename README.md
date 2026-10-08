@@ -28,13 +28,17 @@ Use the toolbar Theme menu to choose **System**, **Light**, or **Dark**. System 
 
 Drag selected files or folders from the local file list to the remote file list to upload, or from remote to local to download. Drops always target the directory currently shown in the destination pane, including when you drop over a folder row. A confirmation shows the destination before copying; source files are kept. Multiple selections are supported. Explorer files can also be dropped into the remote pane. Remote files cannot be dragged out to Explorer in this version. Connect and select a project, pod, and container first. Drops are disabled during operations.
 
-## Automatic uploads
+## Automation job manager
 
-Use the Automation toolbar button while connected. Choose a local source folder, filename wildcard, stability wait, namespace, running pod, container, destination path, and 1–16 parallel files. Test Configuration checks connectivity and that the destination directory exists and is writable. Save & Start saves one job and starts monitoring existing and newly added matching files while WinOCP remains open. Jobs do not start automatically after restarting WinOCP.
+Use Automation while connected. The searchable job list supports New Job, Save, and Delete. The old single-job file is migrated automatically. Job Details contains the local folder, wildcard pattern, stability wait, optional recursive monitoring, namespace/pod/container destination, parallel files (1–16), and notes. Save keeps settings without starting monitoring; Test Configuration checks connectivity and destination write access. Start confirms possible overwrites. Multiple jobs can run independently; each job has its own parallel limit and receipts.
 
-A file must have an unchanged size and modification timestamp for the selected stability wait, then be exclusively readable. Uploads retry up to three attempts, verify the remote byte size, and appear in Transfers with per-file cancellation. Stop cancels active uploads; partial destinations may remain. Include subfolders preserves the relative folder structure. Source files are retained, and existing remote files may be overwritten.
+Pause holds new dispatch while active uploads finish; Resume restarts dispatch. Stop cancels active and queued uploads. Stop every running/paused job before closing Automation or changing the cluster connection. Jobs require manual Start after reopening WinOCP and only run while the application remains open. Source files are retained; recursive uploads preserve relative directories and skip reparse points. Existing destination files may be overwritten.
 
-Saved settings and successful file signatures are stored beside the executable in `automation.json` and `automation-receipts.json`, without credentials. Successful unchanged source files are skipped on subsequent scans and starts; changed files are eligible again. Files that fail or are cancelled after being queued are not repeatedly retried in the same run; restart the job to try those versions again. Cluster/pod connectivity is checked during monitoring; connection loss stops the job. Stop and close Automation before changing or disconnecting the cluster. Verification compares byte sizes, not hashes. Automation requires `sh`, `cat`, `wc`, and `mkdir` for subfolders.
+The Transfers tab shows the selected job's real queue, progress, average speed, status, and start/completion timestamps. Filter by status, search filenames/source paths, and choose the last 24 hours or 7 days. Summary cards show active/queued counts, 24-hour successes/failures, and a 7-day total. Cancel applies to queued or active files; Retry makes a failed/cancelled version eligible again while monitoring. If the job is stopped, Retry starts monitoring after confirmation, which can also retry other unfinished versions. Activity logs have level filtering; Transfer Details shows the selected row. Clear history removes completed/cancelled rows and preserves active, queued, and failed rows.
+
+Files must have stable size/mtime and be exclusively readable. Uploads retry up to three attempts and verify remote byte size (not hashes). Connectivity loss stops the affected job; partial destination files may remain. Successful unchanged file versions are skipped using per-job, cluster/destination-scoped receipts. Failed/cancelled versions wait for an explicit retry or a new job run. Avoid configuring multiple jobs to overwrite the same remote filename.
+
+Job settings, successful signatures, and 7-day transfer history are stored beside the executable in `automation.json`, `automation-receipts-<job-id>.json`, and `automation-history.json`, without credentials. Activity logs are retained for the current window session (up to 1,000 per job). Automation requires `sh`, `cat`, `wc`, and `mkdir` for subfolders.
 
 ## File metadata and sorting
 
@@ -60,7 +64,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v20/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v21/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 

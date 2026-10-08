@@ -2,6 +2,8 @@ using System.IO;
 using System.Text.Json;
 namespace WinOCP;
 public sealed class AutomationJob {
+    public string Id {get;set;}=Guid.NewGuid().ToString("N");
+    public string Description {get;set;}="";
     public string Cluster {get;set;}="";
     public string Name {get;set;}="Automatic upload";
     public string Source {get;set;}="";
@@ -24,8 +26,11 @@ public sealed class FolderUploadRunner {
     readonly Dictionary<string,(string Stamp,DateTime Since)> observed=new(StringComparer.OrdinalIgnoreCase);
     readonly Dictionary<string,Task> active=new(StringComparer.OrdinalIgnoreCase);
     readonly HashSet<string> targets=new(StringComparer.OrdinalIgnoreCase);
+    public bool Paused {get;set;}
+    readonly Dictionary<string,(string Stamp,string Key,TransferItem Row)> queued=new(StringComparer.OrdinalIgnoreCase);
     readonly HashSet<string> attempted=new(StringComparer.OrdinalIgnoreCase);
     public FolderUploadRunner(AutomationJob job,AutomationClient client,Action<string> log,Action<TransferItem> add,string receiptsPath){this.job=job;this.client=client;this.log=log;this.add=add;this.receiptsPath=receiptsPath;try{receipts=JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(receiptsPath))??new();}catch{receipts=new();}}
+    public void Retry(string path){if(File.Exists(path)){var key=Key(path);attempted.Remove(key+"|"+Stamp(new FileInfo(path)));}}
     public static string Stamp(FileInfo file)=>$"{file.Length}:{file.LastWriteTimeUtc.Ticks}";
     public static void Validate(AutomationJob job){if(!Directory.Exists(job.Source))throw new IOException("Choose an existing local source directory.");if(string.IsNullOrWhiteSpace(job.Pattern)||job.Pattern.IndexOfAny(['/', '\\', '\0'])>=0)throw new IOException("Enter a filename pattern such as *.csv, without directory separators.");if(job.Parallel<1||job.Parallel>16)throw new IOException("Parallel files must be between 1 and 16.");if(job.StableSeconds<1||job.StableSeconds>300)throw new IOException("Stability wait must be 1–300 seconds.");if(new[]{job.Project,job.Pod,job.Container}.Any(string.IsNullOrWhiteSpace))throw new IOException("Select a namespace, pod, and container.");if(!job.Destination.StartsWith('/')||job.Destination.Contains('\0'))throw new IOException("Enter an absolute pod destination directory.");}
     public async Task Test(CancellationToken token){Validate(job);await client.Query(token,"whoami");await client.Query(token,"exec","-n",job.Project,job.Pod,"-c",job.Container,"--","sh","-c","test -d \"$1\" && test -w \"$1\"","sh",job.Destination);}
@@ -37,12 +42,13 @@ public sealed class FolderUploadRunner {
         var files=new DirectoryInfo(job.Source).EnumerateFiles(job.Pattern,new EnumerationOptions{RecurseSubdirectories=job.Recursive,AttributesToSkip=FileAttributes.ReparsePoint,IgnoreInaccessible=false,MatchType=MatchType.Win32}).ToArray();var present=files.Select(x=>x.FullName).ToHashSet(StringComparer.OrdinalIgnoreCase);foreach(var stale in observed.Keys.Where(x=>!present.Contains(x)).ToArray())observed.Remove(stale);
         foreach(var file in files){if(active.ContainsKey(file.FullName))continue;string stamp;try{stamp=Stamp(file);}catch(IOException){continue;}
             if(!observed.TryGetValue(file.FullName,out var prior)||prior.Stamp!=stamp){observed[file.FullName]=(stamp,DateTime.UtcNow);continue;}
-            var key=Key(file.FullName);if(receipts.GetValueOrDefault(key)==stamp||attempted.Contains(key+"|"+stamp)||DateTime.UtcNow-prior.Since<TimeSpan.FromSeconds(job.StableSeconds)||active.Count>=job.Parallel||targets.Contains(file.Name))continue;
-            targets.Add(file.Name);attempted.Add(key+"|"+stamp);active[file.FullName]=Send(file.FullName,stamp,key,token);
+            var key=Key(file.FullName);if(receipts.GetValueOrDefault(key)==stamp||attempted.Contains(key+"|"+stamp)||DateTime.UtcNow-prior.Since<TimeSpan.FromSeconds(job.StableSeconds)||queued.ContainsKey(file.FullName))continue;
+            var row=new TransferItem(file.Name,true,file.FullName);row.Prepare(file.Length);add(row);queued[file.FullName]=(stamp,key,row);attempted.Add(key+"|"+stamp);
         }
+        foreach(var path in queued.Keys.ToArray()){var waiting=queued[path];if(waiting.Row.Cancellation.IsCancellationRequested||!File.Exists(path)||Stamp(new FileInfo(path))!=waiting.Stamp){waiting.Row.Finish("Cancelled");waiting.Row.Cancellation.Dispose();queued.Remove(path);continue;}if(Paused||active.Count>=job.Parallel||targets.Contains(Path.GetFileName(path)))continue;queued.Remove(path);targets.Add(Path.GetFileName(path));active[path]=Send(path,waiting.Stamp,waiting.Key,waiting.Row,token);}
         await Task.Delay(1000,token);
-    }}finally{lifetime.Cancel();try{await Task.WhenAll(active.Values);}catch{}}}
-    async Task Send(string path,string stamp,string key,CancellationToken token){var row=new TransferItem(Path.GetFileName(path),true);add(row);using var linked=CancellationTokenSource.CreateLinkedTokenSource(token,row.Cancellation.Token);try{
+    }}finally{lifetime.Cancel();foreach(var pending in queued.Values){pending.Row.Finish("Cancelled");pending.Row.Cancellation.Dispose();}queued.Clear();try{await Task.WhenAll(active.Values);}catch{}}}
+    async Task Send(string path,string stamp,string key,TransferItem row,CancellationToken token){using var linked=CancellationTokenSource.CreateLinkedTokenSource(token,row.Cancellation.Token);try{
         for(int attempt=1;attempt<=3;attempt++){try{linked.Token.ThrowIfCancellationRequested();if(Stamp(new FileInfo(path))!=stamp)throw new IOException("Source changed before transfer; waiting for the next stable version.");var destination=job.Destination;
             if(job.Recursive){var relative=Path.GetDirectoryName(Path.GetRelativePath(job.Source,path));if(!string.IsNullOrEmpty(relative)){destination=job.Destination.TrimEnd('/' )+"/"+relative.Replace(Path.DirectorySeparatorChar,'/');await client.Query(linked.Token,"exec","-n",job.Project,job.Pod,"-c",job.Container,"--","sh","-c","mkdir -p -- \"$1\"","sh",destination);}}
             await client.Upload(path,job.Project,job.Pod,job.Container,destination,row,linked.Token);
