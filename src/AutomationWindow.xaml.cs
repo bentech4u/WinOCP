@@ -20,6 +20,7 @@ public partial class AutomationWindow : Window {
     bool loading;
     string cluster="";
     readonly AutomationJob defaults;
+    public Func<AutomationJob,Task>? OpenRemoteFolder {get;set;}
     public bool IsRunning=>jobs.Any(x=>x.Running);
     public AutomationWindow(AutomationClient client,Action<TransferItem> add,string source,string project,string pod,string container,string destination){
         this.client=client;this.add=add;defaults=new(){Source=source,Project=project,Pod=pod,Container=container,Destination=destination};InitializeComponent();ParallelFiles.ItemsSource=Enumerable.Range(1,16);Stability.ItemsSource=new[]{1,5,10,20,30,60,120,300};
@@ -78,6 +79,6 @@ public partial class AutomationWindow : Window {
     void ClearHistory(object s,RoutedEventArgs e){if(current==null)return;foreach(var row in current.Transfers.Where(x=>x.State is "Completed" or "Cancelled").ToArray())current.Transfers.Remove(row);try{SaveHistory();}catch(Exception ex){Warn(ex);}UpdateCounts();}
     void CancelTransfer(object s,RoutedEventArgs e){if(((s as FrameworkElement)?.DataContext??TransferTable.SelectedItem) is TransferItem row&&row.CanCancel)row.Cancellation.Cancel();}
     async void RetryTransfer(object s,RoutedEventArgs e){if(current==null||((s as FrameworkElement)?.DataContext??TransferTable.SelectedItem) is not TransferItem row||row.State is not ("Failed" or "Cancelled"))return;try{if(current.Runner!=null){current.Runner.Retry(row.SourcePath);Log(current,"INFO","Retry requested: "+row.Name);}else await StartRuntime(current,true);}catch(Exception ex){Warn(ex);}}
-    void OpenFolder(object s,RoutedEventArgs e){if(current==null)return;try{Process.Start(new ProcessStartInfo(current.Job.Source){UseShellExecute=true});}catch(Exception ex){Warn(ex);}}
+    async void OpenFolder(object s,RoutedEventArgs e){if(current==null)return;try{if(OpenRemoteFolder==null)throw new IOException("Remote file viewer is unavailable.");await OpenRemoteFolder(current.Job);}catch(Exception ex){Warn(ex);}}
 
 }
