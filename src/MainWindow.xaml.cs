@@ -6,7 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 namespace WinOCP;
-public record Entry(string Name, string FullPath, bool Directory, long? Size = null) {
+public record Entry(string Name, string FullPath, bool Directory, long? Size = null, DateTime? Modified = null, string Rights = "Unavailable", string Owner = "Unavailable") {
+    public string MetadataTip => $"Modified: {Modified:yyyy-MM-dd HH:mm:ss}\nOwner: {Owner}\nRights: {Rights}";
     public string Kind => Directory ? "Folder" : "File";
     public string Icon => Directory ? "\uE8B7" : "\uE8A5";
     public string IconColor => Directory ? "#EAB134" : "#7D96B0";
@@ -32,7 +33,7 @@ public partial class MainWindow : Window
     string Pod => Pods.SelectedItem as string ?? throw new Exception("Choose a pod.");
     string Container => Containers.SelectedItem as string ?? throw new Exception("Choose a container.");
     public MainWindow() {
-        InitializeComponent(); TransferList.ItemsSource = transfers; LocalFiles.ContextMenu = new ContextMenu(); RemoteFiles.ContextMenu = new ContextMenu();
+        InitializeComponent(); TransferList.ItemsSource = transfers; LocalFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); RemoteFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); LocalFiles.ContextMenu = new ContextMenu(); RemoteFiles.ContextMenu = new ContextMenu();
         try { if (File.Exists(settingsPath)) { using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath)); themePreference = settings.RootElement.GetProperty("theme").GetString() ?? "System"; } } catch { }
         if (themePreference is not ("Light" or "Dark" or "System")) themePreference = "System";
         ThemeChoice.SelectedIndex = themePreference == "Light" ? 1 : themePreference == "Dark" ? 2 : 0;
@@ -142,7 +143,7 @@ public partial class MainWindow : Window
     async void ProjectChanged(object s, SelectionChangedEventArgs e) { if (loading || Projects.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { Pods.ItemsSource = null; Containers.ItemsSource = null; RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pods", "-n", Project, "-o", "json")); Pods.ItemsSource = d.RootElement.GetProperty("items").EnumerateArray().Where(x => x.GetProperty("status").GetProperty("phase").GetString() == "Running").Select(x => x.GetProperty("metadata").GetProperty("name").GetString()!).Order().ToArray(); } finally { loading = false; } }); }
     async void PodChanged(object s, SelectionChangedEventArgs e) { if (loading || Pods.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pod", Pod, "-n", Project, "-o", "json")); Containers.ItemsSource = d.RootElement.GetProperty("spec").GetProperty("containers").EnumerateArray().Select(x => x.GetProperty("name").GetString()!).ToArray(); Containers.SelectedIndex = 0; RemotePath.Text = "/"; } finally { loading = false; } await LoadRemote(); }); }
     async void ContainerChanged(object s, SelectionChangedEventArgs e) { if (loading || Containers.SelectedItem == null || busy) return; await Run(LoadRemote); }
-    bool LoadLocal() { try { var path = Path.GetFullPath(LocalPath.Text); LocalFiles.ItemsSource = new DirectoryInfo(path).EnumerateFileSystemInfos().Select(x => new Entry(x.Name, x.FullName, (x.Attributes & FileAttributes.Directory) != 0, x is FileInfo f ? f.Length : null)).OrderByDescending(x => x.Directory).ThenBy(x => x.Name).ToArray(); LocalPath.Text = path; return true; } catch (Exception ex) { Log(ex.Message); return false; } }
+    bool LoadLocal() { try { var path = Path.GetFullPath(LocalPath.Text); LocalFiles.ItemsSource = new DirectoryInfo(path).EnumerateFileSystemInfos().Select(FileMetadata.Local).ToArray(); ApplyFileSort(LocalFiles); LocalPath.Text = path; return true; } catch (Exception ex) { Log(ex.Message); return false; } }
     void RefreshLocations() {
         if (busy) return;
         updatingLocations = true;
@@ -158,10 +159,8 @@ public partial class MainWindow : Window
     }
     async Task LoadRemote() {
         RequireConnection(); var path = RemotePath.Text.Trim(); if (!path.StartsWith('/') || path.Contains('\0')) throw new Exception("Enter an absolute container path.");
-        var result = await Oc("exec", "-n", Project, Pod, "-c", Container, "--", "sh", "-c", "cd -- \"$1\" && find . -mindepth 1 -maxdepth 1 -exec sh -c 'for p do if [ -d \"$p\" ]; then printf \"d\\000%s\\000\" \"$p\"; else printf \"f\\000%s\\000\" \"$p\"; fi; done' sh {} +", "sh", path);
-        var parts = result.Split('\0'); var entries = new List<Entry>();
-        for (int i = 0; i + 1 < parts.Length; i += 2) { var name = parts[i + 1]; if (name.StartsWith("./")) name = name[2..]; entries.Add(new(name, path.TrimEnd('/') + "/" + name, parts[i] == "d")); }
-        RemoteFiles.ItemsSource = entries.OrderByDescending(x => x.Directory).ThenBy(x => x.Name).ToArray(); Log("Container directory loaded.");
+        var result = await Oc("exec", "-n", Project, Pod, "-c", Container, "--", "sh", "-c", "cd -- \"$1\" && find . -mindepth 1 -maxdepth 1 -exec sh -c 'for p do if [ -d \"$p\" ]; then kind=d; else kind=f; fi; meta=$(stat -L -c \"%s|%Y|%A|%U|%u\" -- \"$p\" 2>/dev/null) || meta=; printf \"%s\\000%s\\000%s\\000\" \"$kind\" \"$p\" \"$meta\"; done' sh {} +", "sh", path);
+        RemoteFiles.ItemsSource = FileMetadata.ParseRemote(path, result); ApplyFileSort(RemoteFiles); Log("Container directory loaded.");
     }
     void LocalGo(object s, RoutedEventArgs e) { if (!busy) LoadLocal(); }
     void LocalUp(object s, RoutedEventArgs e) { if (busy) return; LocalPath.Text = System.IO.Directory.GetParent(LocalPath.Text)?.FullName ?? LocalPath.Text; LoadLocal(); }
@@ -179,7 +178,7 @@ public partial class MainWindow : Window
         var items = droppedItems ?? (upload ? LocalFiles : RemoteFiles).SelectedItems.Cast<Entry>().ToArray();
         if (items.Length == 0) { Log("Select files or folders first."); return; }
         var destination = upload ? RemotePath.Text : LocalPath.Text;
-        if (MessageBox.Show($"{(upload ? "Upload" : "Download")} {items.Length} item(s) to:\n{destination}\n\nExisting files may be overwritten.", "Confirm transfer", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+        if (!ConfirmDialog.Ask(this, "Confirm transfer", $"{(upload ? "Upload" : "Download")} {items.Length} item(s) to:\n{destination}\n\nExisting files may be overwritten.")) return;
         await Run(async () => { RequireConnection(); var project = Project; var pod = Pod; var container = Container; var local = Path.GetFullPath(LocalPath.Text); var remote = RemotePath.Text.TrimEnd('/') + "/";
             if (!remote.StartsWith('/') || remote.Contains('\0')) throw new Exception("Enter an absolute container directory.");
             var batch = items.Select(item => (Entry: item, Row: new TransferItem(item.Name, upload))).ToArray();

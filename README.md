@@ -28,6 +28,10 @@ Use the toolbar Theme menu to choose **System**, **Light**, or **Dark**. System 
 
 Drag selected files or folders from the local file list to the remote file list to upload, or from remote to local to download. Drops always target the directory currently shown in the destination pane, including when you drop over a folder row. A confirmation shows the destination before copying; source files are kept. Multiple selections are supported. Explorer files can also be dropped into the remote pane. Remote files cannot be dragged out to Explorer in this version. Connect and select a project, pod, and container first. Drops are disabled during operations.
 
+## File metadata and sorting
+
+Both panes show Size, Modified, Rights, Owner, and Type. Click headers to toggle ascending/descending sorting; directories stay first. Sort choices are retained independently per pane during navigation and refresh. Timestamps use the local PC timezone. Remote metadata uses `stat -L -c` (GNU/BusyBox style); if unavailable, rows still load with unknown metadata. Local rights show Windows ACL entries rather than Unix mode bits. Hover a row for full permission details; resize columns or scroll horizontally to see additional columns.
+
 ## File actions and editing
 
 Right-click either file pane for New File, New Directory, Delete, Rename, or Edit. New uses the displayed directory; right-clicking a row selects it unless it is already part of a multiple selection. Delete permanently removes selected items and directory contents after confirmation. Rename never intentionally overwrites another item. Remote actions require `mkdir`, `rm`, and `mv` supporting `-T`/`-n`.
@@ -48,7 +52,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v16/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v17/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 
