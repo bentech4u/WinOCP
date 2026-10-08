@@ -24,13 +24,15 @@ public partial class MainWindow : Window
     bool preserveSelection;
     bool updatingLocations;
     const string DragFormat = "WinOCP.InternalFiles";
+    readonly System.Collections.ObjectModel.ObservableCollection<TransferItem> transfers = new();
+    CancellationToken? transferToken;
     readonly Guid windowId = Guid.NewGuid();
     record FileDrag(Guid WindowId, bool Upload, Entry[] Items, string? Project, string? Pod, string? Container);
     string Project => Projects.SelectedItem as string ?? throw new Exception("Choose a project.");
     string Pod => Pods.SelectedItem as string ?? throw new Exception("Choose a pod.");
     string Container => Containers.SelectedItem as string ?? throw new Exception("Choose a container.");
     public MainWindow() {
-        InitializeComponent();
+        InitializeComponent(); TransferList.ItemsSource = transfers;
         try { if (File.Exists(settingsPath)) { using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath)); themePreference = settings.RootElement.GetProperty("theme").GetString() ?? "System"; } } catch { }
         if (themePreference is not ("Light" or "Dark" or "System")) themePreference = "System";
         ThemeChoice.SelectedIndex = themePreference == "Light" ? 1 : themePreference == "Dark" ? 2 : 0;
@@ -70,8 +72,11 @@ public partial class MainWindow : Window
         }
         return success;
     }
-    void ShowHistory(object s, RoutedEventArgs e) => History.Focus();
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.10 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowHistory(object s, RoutedEventArgs e) { ActivityPanel.IsExpanded = true; History.Focus(); }
+    void TransfersExpanded(object s, RoutedEventArgs e) { if (ActivityPanel != null) ActivityPanel.IsExpanded = false; }
+    void ActivityExpanded(object s, RoutedEventArgs e) { if (TransfersPanel != null) TransfersPanel.IsExpanded = false; }
+    void CancelTransfer(object s, RoutedEventArgs e) { if ((s as FrameworkElement)?.DataContext is TransferItem item) item.Cancellation.Cancel(); }
+    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.11 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";
@@ -99,8 +104,9 @@ public partial class MainWindow : Window
         using var p = Process.Start(psi) ?? throw new Exception("Could not start oc.");
         p.StandardInput.Close();
         var stdout = p.StandardOutput.ReadToEndAsync(); var stderr = p.StandardError.ReadToEndAsync();
-        using var registration = operation!.Token.Register(() => { try { p.Kill(true); } catch { } });
-        await p.WaitForExitAsync(operation.Token); var result = await stdout; var error = await stderr;
+        var token = transferToken ?? operation!.Token;
+        using var registration = token.Register(() => { try { p.Kill(true); } catch { } });
+        await p.WaitForExitAsync(token); var result = await stdout; var error = await stderr;
         if (p.ExitCode != 0) throw new Exception(Secret.Password.Length > 0 ? error.Replace(Secret.Password, "[redacted]").Trim() : error.Trim());
         return result;
     }
@@ -177,15 +183,63 @@ public partial class MainWindow : Window
         if (MessageBox.Show($"{(upload ? "Upload" : "Download")} {items.Length} item(s) to:\n{destination}\n\nExisting files may be overwritten.", "Confirm transfer", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
         await Run(async () => { RequireConnection(); var project = Project; var pod = Pod; var container = Container; var local = Path.GetFullPath(LocalPath.Text); var remote = RemotePath.Text.TrimEnd('/') + "/";
             if (!remote.StartsWith('/') || remote.Contains('\0')) throw new Exception("Enter an absolute container directory.");
-            foreach (var item in items) {
-                Log("Transferring " + item.Name + " …");
-                if (upload) await OcAt(Path.GetDirectoryName(item.FullPath)!, "cp", "./" + item.Name, pod + ":" + remote, "-n", project, "-c", container);
-                else { if (item.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || item.Name is "." or ".." || item.Name.EndsWith('.') || item.Name.EndsWith(' ')) throw new Exception("Filename is not valid on Windows: " + item.Name); await OcAt(local, "cp", pod + ":" + item.FullPath, "./" + item.Name, "-n", project, "-c", container); }
+            var batch = items.Select(item => (Entry: item, Row: new TransferItem(item.Name, upload))).ToArray();
+            foreach (var pair in batch) transfers.Add(pair.Row);
+            TransfersPanel.IsExpanded = true;
+            bool failed = false;
+            foreach (var (item, row) in batch) {
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(operation!.Token, row.Cancellation.Token);
+                transferToken = linked.Token;
+                try {
+                    linked.Token.ThrowIfCancellationRequested();
+                    if (!upload && (item.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || item.Name is "." or ".." || item.Name.EndsWith('.') || item.Name.EndsWith(' '))) throw new Exception("Filename is not valid on Windows: " + item.Name);
+                    Log("Transferring " + item.Name + " …");
+                    if (item.Directory) {
+                        row.Start(null);
+                        if (upload) await OcAt(Path.GetDirectoryName(item.FullPath)!, "cp", "./" + item.Name, pod + ":" + remote, "-n", project, "-c", container);
+                        else await OcAt(local, "cp", pod + ":" + item.FullPath, "./" + item.Name, "-n", project, "-c", container);
+                    } else await StreamFile(upload, item, row, project, pod, container, local, remote, linked.Token);
+                    row.Finish("Completed");
+                } catch (OperationCanceledException) { row.Finish("Cancelled"); failed = true; Log("Cancelled " + item.Name + ". A partial destination may remain."); }
+                catch (Exception ex) { row.Finish("Failed"); failed = true; Log(item.Name + ": " + ex.Message); }
+                finally { transferToken = null; row.Cancellation.Dispose(); }
             }
-            LoadLocal(); await LoadRemote(); Log("Transfer completed.");
+            LoadLocal(); await LoadRemote(); Log(failed ? "Transfer batch finished with cancelled or failed items." : "Transfer completed.");
         });
     }
-    void FileDragStart(object s, MouseButtonEventArgs e) {
+    async Task StreamFile(bool upload, Entry item, TransferItem row, string project, string pod, string container, string local, string remote, CancellationToken token) {
+        long total = upload ? new FileInfo(item.FullPath).Length : long.Parse((await Oc("exec", "-n", project, pod, "-c", container, "--", "sh", "-c", "wc -c < \"$1\"", "sh", item.FullPath)).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+        row.Start(total);
+        var exe = Path.Combine(AppContext.BaseDirectory, "tools", "oc.exe");
+        var psi = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = session };
+        psi.Environment["KUBECONFIG"] = config!; psi.Environment["HOME"] = session;
+        foreach (var a in new[]{"--insecure-skip-tls-verify=" + (skipTls ? "true" : "false"), "exec", "-n", project, pod, "-c", container}) psi.ArgumentList.Add(a);
+        if (upload) psi.ArgumentList.Add("-i");
+        foreach (var a in new[]{"--", "sh", "-c", upload ? "cat > \"$1\"" : "cat -- \"$1\"", "sh", upload ? remote + item.Name : item.FullPath}) psi.ArgumentList.Add(a);
+        using var process = Process.Start(psi) ?? throw new Exception("Could not start oc.");
+        using var registration = token.Register(() => { try { process.Kill(true); } catch { } });
+        var errors = process.StandardError.ReadToEndAsync();
+        var output = upload ? process.StandardOutput.ReadToEndAsync() : Task.FromResult("");
+        if (!upload) process.StandardInput.Close();
+        try {
+            await using var file = new FileStream(upload ? item.FullPath : Path.Combine(local,item.Name), upload ? FileMode.Open : FileMode.Create, upload ? FileAccess.Read : FileAccess.Write, FileShare.None, 131072, true);
+            Stream input = upload ? file : process.StandardOutput.BaseStream;
+            Stream destination = upload ? process.StandardInput.BaseStream : file;
+            var buffer = new byte[131072]; long bytes = 0; var update = Stopwatch.StartNew();
+            int read;
+            while ((read = await input.ReadAsync(buffer,token)) > 0) {
+                await destination.WriteAsync(buffer.AsMemory(0,read),token); bytes += read;
+                if (update.ElapsedMilliseconds >= 100) { row.Update(bytes); update.Restart(); }
+            }
+            await destination.FlushAsync(token); row.Update(bytes);
+            if (upload) process.StandardInput.Close();
+            await process.WaitForExitAsync(token);
+            var error = await errors; await output;
+            token.ThrowIfCancellationRequested();
+            if (process.ExitCode != 0) throw new IOException(error.Trim());
+            if (bytes != total) throw new IOException("Source size changed during transfer; verify the destination.");
+        } catch { try { process.Kill(true); } catch { } if (token.IsCancellationRequested) throw new OperationCanceledException(token); throw; }
+    }    void FileDragStart(object s, MouseButtonEventArgs e) {
         dragStart = null; pressedEntry = null; preserveSelection = false;
         if (busy || !connected || s is not ListView list) return;
         var row = ItemsControl.ContainerFromElement(list, e.OriginalSource as DependencyObject) as ListViewItem;

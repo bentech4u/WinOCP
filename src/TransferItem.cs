@@ -1,0 +1,25 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+namespace WinOCP;
+public sealed class TransferItem : INotifyPropertyChanged {
+    public string Name { get; }
+    public string Direction { get; }
+    public long? Total { get; private set; }
+    public long Bytes { get; private set; }
+    public string State { get; private set; } = "Queued";
+    public bool CanCancel => State is "Queued" or "Transferring";
+    public bool Indeterminate => Total == null && CanCancel;
+    public double Percentage => Total is > 0 ? Math.Min(100, Bytes * 100d / Total.Value) : State == "Completed" ? 100 : 0;
+    public string ProgressText => Total.HasValue ? $"{Percentage:0.0}% · {Format(Bytes)} / {Format(Total.Value)} · {Format(Math.Max(0, Total.Value - Bytes))} remaining" : "Folder size unavailable";
+    public string Speed => watch.Elapsed.TotalSeconds > 0 && Bytes > 0 ? Format((long)(Bytes / watch.Elapsed.TotalSeconds)) + "/s" : "—";
+    readonly Stopwatch watch = new();
+    public CancellationTokenSource Cancellation { get; } = new();
+    public TransferItem(string name, bool upload) { Name = name; Direction = upload ? "Upload →" : "← Download"; }
+    public void Start(long? total) { Total = total; State = "Transferring"; watch.Start(); Notify(); }
+    public void Update(long bytes) { Bytes = bytes; Notify(); }
+    public void Finish(string state) { State = state; watch.Stop(); Notify(); }
+    void Notify() { foreach (var name in new[]{nameof(State),nameof(CanCancel),nameof(Indeterminate),nameof(Percentage),nameof(ProgressText),nameof(Speed)}) PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(name)); }
+    public static string Format(long bytes) { string[] units = ["B","KiB","MiB","GiB","TiB"]; double value=bytes; int i=0; while(value>=1024 && i<units.Length-1){value/=1024;i++;} return $"{value:0.##} {units[i]}"; }
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
