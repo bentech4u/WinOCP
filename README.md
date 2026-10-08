@@ -28,6 +28,12 @@ Use the toolbar Theme menu to choose **System**, **Light**, or **Dark**. System 
 
 Drag selected files or folders from the local file list to the remote file list to upload, or from remote to local to download. Drops always target the directory currently shown in the destination pane, including when you drop over a folder row. A confirmation shows the destination before copying; source files are kept. Multiple selections are supported. Explorer files can also be dropped into the remote pane. Remote files cannot be dragged out to Explorer in this version. Connect and select a project, pod, and container first. Drops are disabled during operations.
 
+## File actions and editing
+
+Right-click either file pane for New File, New Directory, Delete, Rename, or Edit. New uses the displayed directory; right-clicking a row selects it unless it is already part of a multiple selection. Delete permanently removes selected items and directory contents after confirmation. Rename never intentionally overwrites another item. Remote actions require `mkdir`, `rm`, and `mv` supporting `-T`/`-n`.
+
+The internal editor supports UTF-8 and BOM-marked UTF-16 text up to 8 MiB, retaining the encoding/BOM. Binary data and unsupported encodings are rejected. Save or Ctrl+S writes to the original local file or uploads to the original pod path. The editor is modal to keep the cluster/container fixed. Failed saves retain unsaved text; closing with unsaved changes asks before discarding. Saves replace file contents and do not provide conflict detection, backups, or rollback.
+
 ## Authentication
 
 TLS verification is enabled by default. Select **Skip TLS certificate verification** before connecting to bypass server certificate validation for login, browsing, and transfers (including kubeconfig). Reconnect after changing the checkbox. When unchecked, verification is explicitly enabled even if the kubeconfig disables it. For private certificate authorities, supply a kubeconfig containing the CA. A kubeconfig is flattened from its original location to preserve relative certificate references; its original file is not edited. External credential plugins (`exec` / `auth-provider`) are rejected because their dependencies are not bundled. Password login depends on the cluster's identity provider supporting it.
@@ -42,7 +48,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v11/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v12/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 

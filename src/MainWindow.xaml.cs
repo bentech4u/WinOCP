@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     string Pod => Pods.SelectedItem as string ?? throw new Exception("Choose a pod.");
     string Container => Containers.SelectedItem as string ?? throw new Exception("Choose a container.");
     public MainWindow() {
-        InitializeComponent(); TransferList.ItemsSource = transfers;
+        InitializeComponent(); TransferList.ItemsSource = transfers; LocalFiles.ContextMenu = new ContextMenu(); RemoteFiles.ContextMenu = new ContextMenu();
         try { if (File.Exists(settingsPath)) { using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath)); themePreference = settings.RootElement.GetProperty("theme").GetString() ?? "System"; } } catch { }
         if (themePreference is not ("Light" or "Dark" or "System")) themePreference = "System";
         ThemeChoice.SelectedIndex = themePreference == "Light" ? 1 : themePreference == "Dark" ? 2 : 0;
@@ -76,7 +76,7 @@ public partial class MainWindow : Window
     void TransfersExpanded(object s, RoutedEventArgs e) { if (ActivityPanel != null) ActivityPanel.IsExpanded = false; }
     void ActivityExpanded(object s, RoutedEventArgs e) { if (TransfersPanel != null) TransfersPanel.IsExpanded = false; }
     void CancelTransfer(object s, RoutedEventArgs e) { if ((s as FrameworkElement)?.DataContext is TransferItem item) item.Cancellation.Cancel(); }
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.11 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.12 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";
