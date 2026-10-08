@@ -1,4 +1,4 @@
-<Application x:Class="WinOCP.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="MainWindow.xaml">
+<Application x:Class="WinOCP.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 <Application.Resources>
 <SolidColorBrush x:Key="PageBrush" Color="#EEF4F9"/><SolidColorBrush x:Key="CardBrush" Color="White"/><SolidColorBrush x:Key="TextBrush" Color="#172B45"/><SolidColorBrush x:Key="MutedBrush" Color="#52677B"/><SolidColorBrush x:Key="BorderBrush" Color="#CCD9E8"/><SolidColorBrush x:Key="InputBrush" Color="#FBFDFF"/><SolidColorBrush x:Key="HeaderBrush" Color="#F4F8FC"/><SolidColorBrush x:Key="HoverBrush" Color="#EAF3FF"/><SolidColorBrush x:Key="SelectedBrush" Color="#D7E9FF"/>
 <SolidColorBrush x:Key="Accent" Color="#087CFA"/>

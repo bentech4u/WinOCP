@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     void TransfersExpanded(object s, RoutedEventArgs e) { if (ActivityPanel != null) ActivityPanel.IsExpanded = false; }
     void ActivityExpanded(object s, RoutedEventArgs e) { if (TransfersPanel != null) TransfersPanel.IsExpanded = false; }
     void CancelTransfer(object s, RoutedEventArgs e) { if ((s as FrameworkElement)?.DataContext is TransferItem item) item.Cancellation.Cancel(); }
+    void ChangeMasterPassword(object s,RoutedEventArgs e)=>new MasterPasswordDialog(true){Owner=this,WindowStartupLocation=WindowStartupLocation.CenterOwner}.ShowDialog();
     void ShowAbout(object s, RoutedEventArgs e) => new AboutWindow { Owner = this }.ShowDialog();
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
