@@ -72,11 +72,10 @@ public partial class MainWindow : Window
         }
         return success;
     }
-    void ShowHistory(object s, RoutedEventArgs e) { ActivityPanel.IsExpanded = true; History.Focus(); }
     void TransfersExpanded(object s, RoutedEventArgs e) { if (ActivityPanel != null) ActivityPanel.IsExpanded = false; }
     void ActivityExpanded(object s, RoutedEventArgs e) { if (TransfersPanel != null) TransfersPanel.IsExpanded = false; }
     void CancelTransfer(object s, RoutedEventArgs e) { if ((s as FrameworkElement)?.DataContext is TransferItem item) item.Cancellation.Cancel(); }
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.12 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowAbout(object s, RoutedEventArgs e) => new AboutWindow { Owner = this }.ShowDialog();
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";

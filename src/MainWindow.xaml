@@ -3,7 +3,7 @@
 <DockPanel DockPanel.Dock="Top" Margin="18,8,18,0" LastChildFill="False">
 <TextBlock DockPanel.Dock="Left" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0"><Run Text="Win"/><Run Text="OCP" Foreground="#ED353C"/></TextBlock>
 <Button DockPanel.Dock="Left" Content="Connections" Click="ShowConnection"/>
-<Button DockPanel.Dock="Left" Content="Activity log" Click="ShowHistory"/>
+
 <Button DockPanel.Dock="Left" Content="About" Click="ShowAbout"/>
 <ComboBox x:Name="ThemeChoice" DockPanel.Dock="Right" Width="110" SelectedIndex="0" SelectionChanged="ThemeChanged" ToolTip="Appearance"><ComboBoxItem Content="System"/><ComboBoxItem Content="Light"/><ComboBoxItem Content="Dark"/></ComboBox>
 <TextBlock DockPanel.Dock="Right" Text="Theme" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="8,0"/>
