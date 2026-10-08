@@ -179,19 +179,30 @@ public partial class MainWindow : Window
         var items = droppedItems ?? (upload ? LocalFiles : RemoteFiles).SelectedItems.Cast<Entry>().ToArray();
         if (items.Length == 0) { Log("Select files or folders first."); return; }
         var destination = upload ? RemotePath.Text : LocalPath.Text;
-        if (!ConfirmDialog.Ask(this, "Confirm transfer", $"{(upload ? "Upload" : "Download")} {items.Length} item(s) to:\n{destination}\n\nExisting files may be overwritten.")) return;
+        if (!ConfirmDialog.Ask(this, "Confirm transfer", $"{(upload ? "Upload" : "Download")} {items.Length} item(s) to:\n{destination}")) return;
         await Run(async () => { RequireConnection(); var project = Project; var pod = Pod; var container = Container; var local = Path.GetFullPath(LocalPath.Text); var remote = RemotePath.Text.TrimEnd('/') + "/";
             if (!remote.StartsWith('/') || remote.Contains('\0')) throw new Exception("Enter an absolute container directory.");
             var batch = items.Select(item => (Entry: item, Row: new TransferItem(item.Name, upload))).ToArray();
             foreach (var pair in batch) transfers.Add(pair.Row);
             TransfersPanel.IsExpanded = true;
-            bool failed = false;
+            bool failed = false; var overwrite = OverwriteChoice.Ask;
             foreach (var (item, row) in batch) {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(operation!.Token, row.Cancellation.Token);
                 transferToken = linked.Token;
                 try {
                     linked.Token.ThrowIfCancellationRequested();
                     if (!upload && (item.Name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || item.Name is "." or ".." || item.Name.EndsWith('.') || item.Name.EndsWith(' '))) throw new Exception("Filename is not valid on Windows: " + item.Name);
+                    if (overwrite == OverwriteChoice.Cancel) { row.Finish("Cancelled"); continue; }
+                    var target = upload ? remote + item.Name : Path.Combine(local,item.Name);
+                    var exists = upload
+                        ? (await Oc("exec","-n",project,pod,"-c",container,"--","sh","-c","if test -e \"$1\" || test -L \"$1\"; then printf exists; else printf absent; fi","sh",target)).Trim() == "exists"
+                        : File.Exists(target) || Directory.Exists(target);
+                    if (exists) {
+                        var choice = overwrite;
+                        if (choice == OverwriteChoice.Ask) { var dialog = new OverwriteDialog(this,target,item.Directory); dialog.ShowDialog(); choice=dialog.Choice; if(dialog.ApplyToRemaining || choice==OverwriteChoice.Cancel) overwrite=choice; }
+                        if(choice==OverwriteChoice.Cancel){row.Finish("Cancelled");failed=true;continue;}
+                        if(choice==OverwriteChoice.Skip){row.Finish("Skipped");Log("Skipped existing destination: "+target);continue;}
+                    }
                     Log("Transferring " + item.Name + " …");
                     if (item.Directory) {
                         row.Start(null);

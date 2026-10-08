@@ -12,6 +12,7 @@ public partial class MainWindow {
             "Running"=>item.State is "Queued" or "Transferring",
             "Completed"=>item.State=="Completed",
             "Cancelled"=>item.State=="Cancelled",
+            "Skipped"=>item.State=="Skipped",
             _=>true
         };
         TransferList.ItemsSource=transferView;
@@ -22,5 +23,5 @@ public partial class MainWindow {
     }
     void TransferStateChanged(object? sender,PropertyChangedEventArgs e){if(e.PropertyName==nameof(TransferItem.State))transferView?.Refresh();}
     void TransferFilterChanged(object sender,SelectionChangedEventArgs e)=>transferView?.Refresh();
-    void ClearTransferHistory(object sender,RoutedEventArgs e){foreach(var item in transfers.Where(x=>x.State is "Completed" or "Cancelled").ToArray())transfers.Remove(item);}
+    void ClearTransferHistory(object sender,RoutedEventArgs e){foreach(var item in transfers.Where(x=>x.State is "Completed" or "Cancelled" or "Skipped").ToArray())transfers.Remove(item);}
 }
