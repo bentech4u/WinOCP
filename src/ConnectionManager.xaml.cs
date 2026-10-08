@@ -28,7 +28,7 @@ public partial class ConnectionManager : Window
         var view = new ListCollectionView(list); view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionProfile.Group))); Sites.ItemsSource = view;
     }
     void SearchChanged(object s, TextChangedEventArgs e) { if (Sites != null && !working) RefreshSites(); }
-    bool DiscardChanges() => !changed || MessageBox.Show(this, "Discard unsaved changes to this site?", "Unsaved changes", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
+    bool DiscardChanges(){if(!changed)return true;var choice=UnsavedChangesDialog.Ask(this,SiteName.Text);if(choice==UnsavedChoice.Cancel)return false;if(choice==UnsavedChoice.Save){SaveSite(this,new RoutedEventArgs());return !changed;}changed=false;return true;}
     void ResetEditor() { editingId = Guid.NewGuid(); SiteName.Text = "New connection"; GroupName.Text = "My connections"; ApiUrl.Text = "https://api.example.com:6443"; Description.Clear(); Notes.Clear(); DefaultProject.Clear(); Method.SelectedIndex = 0; Username.Clear(); Credential.Clear(); ConfigPath.Clear(); RememberSecret.IsChecked = false; SkipCertificate.IsChecked = false; changed = false; }
     void NewSite(object s, RoutedEventArgs e) { if (working || !DiscardChanges()) return; Sites.SelectedItem = null; ResetEditor(); Editor.SelectedIndex = 0; SiteName.Focus(); SiteName.SelectAll(); }
     void SiteSelected(object s, SelectionChangedEventArgs e) {
@@ -40,6 +40,7 @@ public partial class ConnectionManager : Window
         Feedback.Text = "Ready to log in.";
         if (p.EncryptedSecret != null) try { Credential.Password = ConnectionStore.Unprotect(p.EncryptedSecret); } catch { Feedback.Text = "Saved secret cannot be decrypted here. Enter it again."; }
         changed = false;
+        Sites.SelectionChanged -= SiteSelected; try { Sites.SelectedItem = p; } finally { Sites.SelectionChanged += SiteSelected; }
     }
     void MethodChanged(object s, SelectionChangedEventArgs e) {
         if (CredentialLabel == null || ConfigPanel == null) return;

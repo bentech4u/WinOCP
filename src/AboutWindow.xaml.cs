@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Navigation;
 namespace WinOCP;
 public partial class AboutWindow : Window {
-    public const string ReleaseVersion = "0.34";
+    public const string ReleaseVersion = "0.35";
     public AboutWindow() { InitializeComponent(); VersionText.Text = "Version " + ReleaseVersion + " · Portable Edition"; }
     void OpenLink(object sender, RequestNavigateEventArgs e) { Launch(e.Uri.AbsoluteUri); e.Handled = true; }
     void OpenSupport(object sender, RoutedEventArgs e) => Launch("https://buymeacoffee.com/bentech4u");
