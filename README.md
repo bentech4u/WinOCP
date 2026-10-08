@@ -48,7 +48,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v13/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v14/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 
