@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     Point? dragStart;
     Entry? pressedEntry;
     bool preserveSelection;
+    bool updatingLocations;
     const string DragFormat = "WinOCP.InternalFiles";
     readonly Guid windowId = Guid.NewGuid();
     record FileDrag(Guid WindowId, bool Upload, Entry[] Items, string? Project, string? Pod, string? Container);
@@ -35,7 +36,7 @@ public partial class MainWindow : Window
         ThemeChoice.SelectedIndex = themePreference == "Light" ? 1 : themePreference == "Dark" ? 2 : 0;
         ThemeManager.Apply(themePreference);
         SystemEvents.UserPreferenceChanged += SystemThemeChanged;
-        LocalPath.Text = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); LoadLocal();
+        LocalPath.Text = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); LoadLocal(); RefreshLocations();
         Closed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; operation?.Cancel(); Cleanup(); };
         Loaded += (_, _) => { if (ShouldShowManager()) OpenManager(); };
     }
@@ -70,7 +71,7 @@ public partial class MainWindow : Window
         return success;
     }
     void ShowHistory(object s, RoutedEventArgs e) => History.Focus();
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.6 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.7 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";
@@ -85,7 +86,7 @@ public partial class MainWindow : Window
         SecretLabel.Content = Auth.SelectedIndex == 1 ? "Password" : "Token";
         Secret.ToolTip = Auth.SelectedIndex == 1 ? "OpenShift password" : "OpenShift token";
     }
-    void Lock(bool value) { foreach (var control in new Control[] { Auth, Server, User, Secret, SkipTls, ConfigButton, Projects, Pods, Containers, LocalPath, RemotePath, LocalFiles, RemoteFiles }) control.IsEnabled = !value; }
+    void Lock(bool value) { foreach (var control in new Control[] { Auth, Server, User, Secret, SkipTls, ConfigButton, Projects, Pods, Containers, LocalLocations, LocalPath, RemotePath, LocalFiles, RemoteFiles }) control.IsEnabled = !value; }
     async Task Run(Func<Task> action) { if (busy) return; busy = true; Lock(true); operation = new(); try { await action(); } catch (OperationCanceledException) { Log("Cancelled. A partial destination may remain."); } catch (Exception ex) { Log(ex.Message); } finally { busy = false; Lock(false); operation.Dispose(); operation = null; } }
     Task<string> Oc(params string[] args) => OcAt(session, args);
     async Task<string> OcAt(string workingDirectory, params string[] args) {
@@ -132,7 +133,20 @@ public partial class MainWindow : Window
     async void ProjectChanged(object s, SelectionChangedEventArgs e) { if (loading || Projects.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { Pods.ItemsSource = null; Containers.ItemsSource = null; RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pods", "-n", Project, "-o", "json")); Pods.ItemsSource = d.RootElement.GetProperty("items").EnumerateArray().Where(x => x.GetProperty("status").GetProperty("phase").GetString() == "Running").Select(x => x.GetProperty("metadata").GetProperty("name").GetString()!).Order().ToArray(); } finally { loading = false; } }); }
     async void PodChanged(object s, SelectionChangedEventArgs e) { if (loading || Pods.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pod", Pod, "-n", Project, "-o", "json")); Containers.ItemsSource = d.RootElement.GetProperty("spec").GetProperty("containers").EnumerateArray().Select(x => x.GetProperty("name").GetString()!).ToArray(); Containers.SelectedIndex = 0; RemotePath.Text = "/"; } finally { loading = false; } await LoadRemote(); }); }
     async void ContainerChanged(object s, SelectionChangedEventArgs e) { if (loading || Containers.SelectedItem == null || busy) return; await Run(LoadRemote); }
-    void LoadLocal() { try { var path = Path.GetFullPath(LocalPath.Text); LocalFiles.ItemsSource = new DirectoryInfo(path).EnumerateFileSystemInfos().Select(x => new Entry(x.Name, x.FullName, (x.Attributes & FileAttributes.Directory) != 0, x is FileInfo f ? f.Length : null)).OrderByDescending(x => x.Directory).ThenBy(x => x.Name).ToArray(); LocalPath.Text = path; } catch (Exception ex) { Log(ex.Message); } }
+    bool LoadLocal() { try { var path = Path.GetFullPath(LocalPath.Text); LocalFiles.ItemsSource = new DirectoryInfo(path).EnumerateFileSystemInfos().Select(x => new Entry(x.Name, x.FullName, (x.Attributes & FileAttributes.Directory) != 0, x is FileInfo f ? f.Length : null)).OrderByDescending(x => x.Directory).ThenBy(x => x.Name).ToArray(); LocalPath.Text = path; return true; } catch (Exception ex) { Log(ex.Message); return false; } }
+    void RefreshLocations() {
+        if (busy) return;
+        updatingLocations = true;
+        try { var selected = (LocalLocations.SelectedItem as LocalLocation)?.Path; var items = LocalLocation.GetLocations(); LocalLocations.ItemsSource = items; LocalLocations.SelectedItem = items.FirstOrDefault(x => x.Path == selected) ?? items[0]; }
+        catch (Exception ex) { Log("Could not refresh local locations: " + ex.Message); }
+        finally { updatingLocations = false; }
+    }
+    void LocationsOpened(object s, EventArgs e) => RefreshLocations();
+    void LocationSelected(object s, SelectionChangedEventArgs e) {
+        if (busy || updatingLocations || LocalLocations.SelectedItem is not LocalLocation location || string.IsNullOrEmpty(location.Path)) return;
+        var previous = LocalPath.Text; LocalPath.Text = location.Path;
+        if (!LoadLocal()) { LocalPath.Text = previous; updatingLocations = true; LocalLocations.SelectedIndex = 0; updatingLocations = false; }
+    }
     async Task LoadRemote() {
         RequireConnection(); var path = RemotePath.Text.Trim(); if (!path.StartsWith('/') || path.Contains('\0')) throw new Exception("Enter an absolute container path.");
         var result = await Oc("exec", "-n", Project, Pod, "-c", Container, "--", "sh", "-c", "cd -- \"$1\" && find . -mindepth 1 -maxdepth 1 -exec sh -c 'for p do if [ -d \"$p\" ]; then printf \"d\\000%s\\000\" \"$p\"; else printf \"f\\000%s\\000\" \"$p\"; fi; done' sh {} +", "sh", path);
