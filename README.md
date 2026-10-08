@@ -12,7 +12,7 @@ Extract **all** files from `WinOCP-win-x64.zip` into a writable folder and launc
 4. Browse local folders on the left and container folders on the right. Use the local Locations dropdown to open a drive, Home, Desktop, Documents, or Downloads without typing a path. The drive list refreshes whenever you open the dropdown. Double-click folders, type a path and press Enter, or use Go / Up.
 5. Select one or more files/folders and use Upload or Download. Confirm the destination; existing files may be overwritten. Cancel stops the CLI but does not roll back partial transfers.
 
-The account needs permission to list projects/pods and execute commands in the selected container. Browsing requires `sh`, `find` supporting `-mindepth`/`-maxdepth`, and `printf`; transfer requires `tar` inside the container. Distroless containers without these tools cannot be browsed. Local Windows filenames and permissions apply to downloads. No resume or byte-level progress is implemented; the status reports the active item. Symlink behavior follows `oc cp`, which may skip symlinks.
+The project picker uses the OpenShift projects endpoint for the signed-in account, then hides system projects named `openshift`, `openshift-*`, or `kube-*`. This applies at login and on refresh, including for administrators. Other accessible projects, including `default`, remain visible. A saved default project cannot bypass this filter. If no user projects remain, the list stays empty and the status explains why. The account needs permission to list projects/pods and execute commands in the selected container. Browsing requires `sh`, `find` supporting `-mindepth`/`-maxdepth`, and `printf`; transfer requires `tar` inside the container. Distroless containers without these tools cannot be browsed. Local Windows filenames and permissions apply to downloads. No resume or byte-level progress is implemented; the status reports the active item. Symlink behavior follows `oc cp`, which may skip symlinks.
 
 ## Saved connections
 
@@ -42,7 +42,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v7/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v8/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 

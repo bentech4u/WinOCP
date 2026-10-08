@@ -66,12 +66,12 @@ public partial class MainWindow : Window
         await Run(async () => { await LoginCore(); success = true; Title = "WinOCP — " + profile.Name; });
         if (success && !string.IsNullOrEmpty(profile.DefaultProject)) {
             if (Projects.Items.Contains(profile.DefaultProject)) Projects.SelectedItem = profile.DefaultProject;
-            else Log("Connected. Default project is unavailable; choose another project.");
+            else Log("Connected. Default project is unavailable or hidden as a system project; choose a user project.");
         }
         return success;
     }
     void ShowHistory(object s, RoutedEventArgs e) => History.Focus();
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.7 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.8 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";
@@ -124,11 +124,15 @@ public partial class MainWindow : Window
             else { if (string.IsNullOrWhiteSpace(User.Text)) throw new Exception("Enter a username."); args.Add("--username=" + User.Text); args.Add("--password=" + Secret.Password); }
             await Oc(args.ToArray());
         }
-        var identity = (await Oc("whoami")).Trim(); Secret.Clear(); connected = true; UpdateConnection(identity); await LoadProjects(); Log("Connected as " + identity + (skipTls ? " · TLS certificate verification skipped" : " · TLS certificate verification enabled"));
+        var identity = (await Oc("whoami")).Trim(); Secret.Clear(); connected = true; UpdateConnection(identity); await LoadProjects(); Log("Connected as " + identity + (skipTls ? " · TLS certificate verification skipped" : " · TLS certificate verification enabled") + (Projects.Items.Count == 0 ? " · No accessible user projects found" : ""));
     }
     void Disconnect(object s, RoutedEventArgs e) { if (busy) return; connected = false; UpdateConnection(); ClearRemote(); Cleanup(); Secret.Clear(); Title = "WinOCP — OpenShift File Transfer"; Log("Disconnected. Temporary credentials removed."); if (ShouldShowManager()) OpenManager(); }
     void RequireConnection() { if (!connected) throw new Exception("Connect first."); }
-    async Task LoadProjects() { using var d = JsonDocument.Parse(await Oc("get", "projects", "-o", "json")); ClearRemote(); Projects.ItemsSource = d.RootElement.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("metadata").GetProperty("name").GetString()!).Order().ToArray(); }
+    async Task LoadProjects() {
+        var projects = ProjectCatalog.UserProjects(await Oc("get", "projects", "-o", "json"));
+        ClearRemote(); Projects.ItemsSource = projects;
+        Log(projects.Length == 0 ? "No accessible user projects found. System projects are hidden." : $"Loaded {projects.Length} accessible user project(s). System projects are hidden.");
+    }
     async void RefreshCluster(object s, RoutedEventArgs e) => await Run(async () => { RequireConnection(); await LoadProjects(); });
     async void ProjectChanged(object s, SelectionChangedEventArgs e) { if (loading || Projects.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { Pods.ItemsSource = null; Containers.ItemsSource = null; RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pods", "-n", Project, "-o", "json")); Pods.ItemsSource = d.RootElement.GetProperty("items").EnumerateArray().Where(x => x.GetProperty("status").GetProperty("phase").GetString() == "Running").Select(x => x.GetProperty("metadata").GetProperty("name").GetString()!).Order().ToArray(); } finally { loading = false; } }); }
     async void PodChanged(object s, SelectionChangedEventArgs e) { if (loading || Pods.SelectedItem == null || busy) return; await Run(async () => { loading = true; try { RemoteFiles.ItemsSource = null; using var d = JsonDocument.Parse(await Oc("get", "pod", Pod, "-n", Project, "-o", "json")); Containers.ItemsSource = d.RootElement.GetProperty("spec").GetProperty("containers").EnumerateArray().Select(x => x.GetProperty("name").GetString()!).ToArray(); Containers.SelectedIndex = 0; RemotePath.Text = "/"; } finally { loading = false; } await LoadRemote(); }); }
