@@ -2,7 +2,7 @@
 <DockPanel Background="{DynamicResource PageBrush}">
 <DockPanel DockPanel.Dock="Top" Margin="18,8,18,0" LastChildFill="False">
 <Image DockPanel.Dock="Left" Width="200" Height="40" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,16,0" ToolTip="WinOCP — OpenShift File Transfer" AutomationProperties.Name="WinOCP"><Image.Source><CroppedBitmap SourceRect="34,54,729,147"><CroppedBitmap.Source><BitmapImage UriSource="pack://application:,,,/WinOCP;component/Assets/WinOCP-banner.png"/></CroppedBitmap.Source></CroppedBitmap></Image.Source></Image>
-<Button DockPanel.Dock="Left" Content="Connections" Click="ShowConnection"/>
+<Button DockPanel.Dock="Left" Content="Connections" Click="ShowConnection"/><Button DockPanel.Dock="Left" Content="Automation" Click="ShowAutomation"/>
 
 <Button DockPanel.Dock="Left" Content="About" Click="ShowAbout"/>
 <ComboBox x:Name="ThemeChoice" DockPanel.Dock="Right" Width="110" SelectedIndex="0" SelectionChanged="ThemeChanged" ToolTip="Appearance"><ComboBoxItem Content="System"/><ComboBoxItem Content="Light"/><ComboBoxItem Content="Dark"/></ComboBox>

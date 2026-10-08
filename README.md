@@ -28,6 +28,14 @@ Use the toolbar Theme menu to choose **System**, **Light**, or **Dark**. System 
 
 Drag selected files or folders from the local file list to the remote file list to upload, or from remote to local to download. Drops always target the directory currently shown in the destination pane, including when you drop over a folder row. A confirmation shows the destination before copying; source files are kept. Multiple selections are supported. Explorer files can also be dropped into the remote pane. Remote files cannot be dragged out to Explorer in this version. Connect and select a project, pod, and container first. Drops are disabled during operations.
 
+## Automatic uploads
+
+Use the Automation toolbar button while connected. Choose a local source folder, filename wildcard, stability wait, namespace, running pod, container, destination path, and 1–16 parallel files. Test Configuration checks connectivity and that the destination directory exists and is writable. Save & Start saves one job and starts monitoring existing and newly added matching files while WinOCP remains open. Jobs do not start automatically after restarting WinOCP.
+
+A file must have an unchanged size and modification timestamp for the selected stability wait, then be exclusively readable. Uploads retry up to three attempts, verify the remote byte size, and appear in Transfers with per-file cancellation. Stop cancels active uploads; partial destinations may remain. Include subfolders preserves the relative folder structure. Source files are retained, and existing remote files may be overwritten.
+
+Saved settings and successful file signatures are stored beside the executable in `automation.json` and `automation-receipts.json`, without credentials. Successful unchanged source files are skipped on subsequent scans and starts; changed files are eligible again. Files that fail or are cancelled after being queued are not repeatedly retried in the same run; restart the job to try those versions again. Cluster/pod connectivity is checked during monitoring; connection loss stops the job. Stop and close Automation before changing or disconnecting the cluster. Verification compares byte sizes, not hashes. Automation requires `sh`, `cat`, `wc`, and `mkdir` for subfolders.
+
 ## File metadata and sorting
 
 Both panes show Size, Modified, Rights, Owner, and Type. Click headers to toggle ascending/descending sorting; directories stay first. Sort choices are retained independently per pane during navigation and refresh. Timestamps use the local PC timezone. Remote metadata uses `stat -L -c` (GNU/BusyBox style); if unavailable, rows still load with unknown metadata. Local rights show Windows ACL entries rather than Unix mode bits. Hover a row for full permission details; resize columns or scroll horizontally to see additional columns.
@@ -52,7 +60,7 @@ Install a .NET 10 SDK on the build machine and obtain a trusted official Windows
 ./Build-Portable.ps1 -OcExe C:/path/to/oc.exe
 ```
 
-This creates `portable-v19/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
+This creates `portable-v20/` and `WinOCP-win-x64.zip`, bundling the runtime and CLI. Building requires access to NuGet when runtime packs are not cached. The source uses only framework libraries. The initial bundle includes OpenShift CLI 4.22.17; its downloaded archive was verified against the official SHA-256 checksum. Rebuild with a different official CLI if your cluster requires another version.
 
 ## Validation
 

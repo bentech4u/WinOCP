@@ -40,7 +40,7 @@ public partial class MainWindow : Window
         ThemeManager.Apply(themePreference);
         SystemEvents.UserPreferenceChanged += SystemThemeChanged;
         LocalPath.Text = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); LoadLocal(); RefreshLocations();
-        Closed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; operation?.Cancel(); Cleanup(); };
+        Closed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; automationWindow?.StopForShutdown(); operation?.Cancel(); Cleanup(); };
         Loaded += (_, _) => { if (ShouldShowManager()) OpenManager(); };
     }
     void ThemeChanged(object s, SelectionChangedEventArgs e) {
@@ -56,7 +56,7 @@ public partial class MainWindow : Window
     void Log(string text) { Status.Text = text; History.AppendText($"{DateTime.Now:HH:mm:ss}  {text}\n"); History.ScrollToEnd(); }
     void ShowFiles(object s, RoutedEventArgs e) => LocalFiles.Focus();
     bool ShouldShowManager() { try { return ConnectionStore.Load().ShowAtStartup; } catch { return true; } }
-    void OpenManager() { if (busy) { Log("Cancel the current operation before opening connections."); return; } new ConnectionManager(this) { Owner = this }.ShowDialog(); }
+    void OpenManager() { if (automationWindow != null) { Log("Close Automation before changing the cluster connection."); return; } if (busy) { Log("Cancel the current operation before opening connections."); return; } new ConnectionManager(this) { Owner = this }.ShowDialog(); }
     void ShowConnection(object s, RoutedEventArgs e) => OpenManager();
     public string LastStatus => Status.Text;
     public void CancelLogin() => operation?.Cancel();
@@ -132,7 +132,7 @@ public partial class MainWindow : Window
         }
         var identity = (await Oc("whoami")).Trim(); Secret.Clear(); connected = true; UpdateConnection(identity); await LoadProjects(); Log("Connected as " + identity + (skipTls ? " · TLS certificate verification skipped" : " · TLS certificate verification enabled") + (Projects.Items.Count == 0 ? " · No accessible user projects found" : ""));
     }
-    void Disconnect(object s, RoutedEventArgs e) { if (busy) return; connected = false; UpdateConnection(); ClearRemote(); Cleanup(); Secret.Clear(); Title = "WinOCP — OpenShift File Transfer"; Log("Disconnected. Temporary credentials removed."); if (ShouldShowManager()) OpenManager(); }
+    void Disconnect(object s, RoutedEventArgs e) { if (automationWindow != null) { Log("Stop and close Automation before disconnecting."); return; } if (busy) return; connected = false; UpdateConnection(); ClearRemote(); Cleanup(); Secret.Clear(); Title = "WinOCP — OpenShift File Transfer"; Log("Disconnected. Temporary credentials removed."); if (ShouldShowManager()) OpenManager(); }
     void RequireConnection() { if (!connected) throw new Exception("Connect first."); }
     async Task LoadProjects() {
         var projects = ProjectCatalog.UserProjects(await Oc("get", "projects", "-o", "json"));
