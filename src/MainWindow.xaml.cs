@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     string Pod => Pods.SelectedItem as string ?? throw new Exception("Choose a pod.");
     string Container => Containers.SelectedItem as string ?? throw new Exception("Choose a container.");
     public MainWindow() {
-        InitializeComponent(); TransferList.ItemsSource = transfers; LocalFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); RemoteFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); LocalFiles.ContextMenu = new ContextMenu(); RemoteFiles.ContextMenu = new ContextMenu();
+        InitializeComponent(); SetupTransferFilters(); LocalFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); RemoteFiles.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(FileColumnClicked)); LocalFiles.ContextMenu = new ContextMenu(); RemoteFiles.ContextMenu = new ContextMenu();
         try { if (File.Exists(settingsPath)) { using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath)); themePreference = settings.RootElement.GetProperty("theme").GetString() ?? "System"; } } catch { }
         if (themePreference is not ("Light" or "Dark" or "System")) themePreference = "System";
         ThemeChoice.SelectedIndex = themePreference == "Light" ? 1 : themePreference == "Dark" ? 2 : 0;

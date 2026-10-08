@@ -17,9 +17,9 @@ public sealed class TransferItem : INotifyPropertyChanged {
     public CancellationTokenSource Cancellation { get; } = new();
     public TransferItem(string name, bool upload) { Name = name; Direction = upload ? "Upload →" : "← Download"; }
     public void Start(long? total) { Total = total; State = "Transferring"; watch.Start(); Notify(); }
-    public void Update(long bytes) { Bytes = bytes; Notify(); }
+    public void Update(long bytes) { Bytes = bytes; Notify(false); }
     public void Finish(string state) { State = state; watch.Stop(); Notify(); }
-    void Notify() { foreach (var name in new[]{nameof(State),nameof(CanCancel),nameof(Indeterminate),nameof(Percentage),nameof(ProgressText),nameof(Speed)}) PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(name)); }
+    void Notify(bool stateChanged = true) { foreach (var name in stateChanged ? new[]{nameof(State),nameof(CanCancel),nameof(Indeterminate),nameof(Percentage),nameof(ProgressText),nameof(Speed)} : new[]{nameof(Percentage),nameof(ProgressText),nameof(Speed)}) PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(name)); }
     public static string Format(long bytes) { string[] units = ["B","KiB","MiB","GiB","TiB"]; double value=bytes; int i=0; while(value>=1024 && i<units.Length-1){value/=1024;i++;} return $"{value:0.##} {units[i]}"; }
     public event PropertyChangedEventHandler? PropertyChanged;
 }

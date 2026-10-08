@@ -52,7 +52,7 @@ public partial class MainWindow {
     }
     async Task DeleteItems(bool remote) {
         if(busy)return;var items=(remote?RemoteFiles:LocalFiles).SelectedItems.Cast<Entry>().ToArray();if(items.Length==0)return;
-        if(MessageBox.Show(this,"Permanently delete these items, including directory contents?\n\n"+string.Join("\n",items.Select(x=>x.Name)),"Delete",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;
+        if(!ConfirmDialog.Ask(this,"Delete","Permanently delete these items, including directory contents?\n\n"+string.Join("\n",items.Select(x=>x.Name)),"Delete"))return;
         await Run(async()=>{try{foreach(var item in items){if(remote)await RemoteCommand("rm -rf -- \"$1\"",item.FullPath);else if(item.Directory)Directory.Delete(item.FullPath,true);else File.Delete(item.FullPath);Log("Deleted "+item.Name);}}finally{await RefreshFiles(remote);}});
     }
     async Task RenameItem(bool remote) {
