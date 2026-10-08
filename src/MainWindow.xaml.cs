@@ -71,7 +71,7 @@ public partial class MainWindow : Window
         return success;
     }
     void ShowHistory(object s, RoutedEventArgs e) => History.Focus();
-    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.8 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
+    void ShowAbout(object s, RoutedEventArgs e) => MessageBox.Show("WinOCP 0.9 — Portable Edition\nOpenShift file transfer for Windows.\n\nBuilt with WPF and the OpenShift CLI.", "About WinOCP");
     void UpdateConnection(string? identity = null) {
         ConnectionTitle.Text = connected ? "Connected to OpenShift" : "Not connected";
         ConnectionDetail.Text = connected ? identity ?? "Authenticated" : "Choose a login method to begin";
