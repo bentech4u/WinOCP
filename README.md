@@ -2,6 +2,26 @@
 
 Portable Windows desktop file transfer for OpenShift. Native WPF interface, bundled .NET 10 runtime and official `oc.exe`.
 
+## Screenshots
+
+Current interface shown with illustrative sample data; no live cluster credentials or personal files are included.
+
+### File browser — dark theme
+
+Browse local and pod files side by side, with file metadata and collapsible transfer history.
+
+![WinOCP file browser in dark theme](docs/screenshots/file-browser-dark.png)
+
+### File browser — light theme
+
+![WinOCP file browser in light theme](docs/screenshots/file-browser-light.png)
+
+### Automation jobs
+
+Configure watched folders, filename patterns, parallel uploads, and the OpenShift destination. Transfers and Completion settings have their own tabs.
+
+![WinOCP automation job configuration](docs/screenshots/automation.png)
+
 ## Run
 
 Extract **all** files from `WinOCP-win-x64.zip` into a writable folder and launch `WinOCP.exe`. No installer, Node, Electron, or separately installed .NET runtime is required. Targets Windows x64 with a desktop environment supported by .NET 10; Windows Server Core is not supported.
