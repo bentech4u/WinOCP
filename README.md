@@ -32,7 +32,7 @@ Drag selected files or folders from the local file list to the remote file list 
 
 Use Automation while connected. The searchable job list supports New Job, Save, and Delete. The old single-job file is migrated automatically. Job Details contains the local folder, wildcard pattern, stability wait, optional recursive monitoring, namespace/pod/container destination, parallel files (1–16), and notes. Save keeps settings without starting monitoring; Test Configuration checks connectivity and destination write access. Start confirms possible overwrites. Multiple jobs can run independently; each job has its own parallel limit and receipts.
 
-Pause holds new dispatch while active uploads finish; Resume restarts dispatch. Stop cancels active and queued uploads. Stop every running/paused job before closing Automation or changing the cluster connection. Jobs require manual Start after reopening WinOCP and only run while the application remains open. Source files are retained; recursive uploads preserve relative directories and skip reparse points. Existing destination files may be overwritten.
+Pause holds new dispatch while active uploads finish; Resume restarts dispatch. Stop cancels active and queued uploads. Stop every running/paused job before closing Automation or changing the cluster connection. Jobs require manual Start after reopening WinOCP and only run while the application remains open. Completion defaults to keeping source files; recursive uploads preserve relative directories and skip reparse points. Existing destination files may be overwritten.
 
 Job Details and Transfers tabs show the configuration and selected job upload queue. Transfers includes progress, speed, status and time filters, search, counts, cancel/retry actions, and timestamps. The shared Activity log shows messages for the selected job with level filtering. It starts folded each time the Automation window opens. Expand its header to view logs, and drag the divider above it to adjust its height. Automation uploads remain visible in the main window Transfers section.
 
@@ -77,3 +77,11 @@ The project has been compiled locally. Connection persistence, encryption roundt
 - .NET self-contained deployment: https://learn.microsoft.com/en-us/dotnet/core/deploying/
 - OpenShift CLI: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 - OpenShift file-copy prerequisites: https://docs.redhat.com/en/documentation/openshift_container_platform/4.13/html-single/nodes/index#nodes-containers-copying-files
+
+### Completion policy
+
+The Completion tab applies to the selected job. SHA-256 content verification is enabled by default and requires sha256sum in the container; Test Configuration checks availability. File size is always checked. Turning SHA-256 off chooses size-only verification, which cannot detect same-size corruption. A failed verification does not record success and follows the upload retry policy.
+
+Keep source files is the default. Move to archive runs only after verification and receipt persistence, preserves relative subfolders, and uses a unique name on collision. The archive must be outside the monitored folder. If archiving fails or the source changes after upload, the verified upload stays completed, the source is retained, and a warning is logged; archive failures are not retried automatically.
+
+Receipts identify successful source versions by full path, size, and last-modified time plus destination. On restart, unchanged successful files are skipped: after 50 successful uploads, adding 20 files uploads only those 20. Changed files or a changed destination are eligible again. Preserve receipt files beside the executable. Metadata tracking does not detect local edits that preserve both size and timestamp and does not check whether previously uploaded remote files were later changed or deleted.
