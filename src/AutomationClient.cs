@@ -34,7 +34,7 @@ public sealed class AutomationClient(string cli,string config,string home,bool s
         p.StandardInput.Close();
         using var cancel=token.Register(()=>{try{p.Kill(true);}catch{}});
         var errors=p.StandardError.ReadToEndAsync();
-        using var hash=job.VerifySha256?IncrementalHash.CreateHash(HashAlgorithmName.SHA256):null;
+        using var hash=FolderDownloadRunner.RequiresHash(job)?IncrementalHash.CreateHash(HashAlgorithmName.SHA256):null;
         try {
             var buffer=new byte[131072];long bytes=0;var clock=Stopwatch.StartNew();int count;
             while ((count=await p.StandardOutput.BaseStream.ReadAsync(buffer,token))>0) {

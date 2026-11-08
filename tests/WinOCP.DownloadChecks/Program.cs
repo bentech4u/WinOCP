@@ -14,13 +14,23 @@ if (args.Length>0) {
         using var output=File.Create(Path.Combine(remote,Path.GetFileName(args[^1])));
         await Console.OpenStandardInput().CopyToAsync(output);return;
     }
-    if(script.Contains("test -w")) return;
+    if(script.StartsWith("test -d") && script.Contains("test -w")) return;
     if(script.Contains("wc -c")) { Console.WriteLine(new FileInfo(Path.Combine(remote,Path.GetFileName(args[^1]))).Length); return; }
+    if(script.Contains("--update=none-fail")) {
+        if(script.Contains("--help"))return;
+        var name=args[^2];
+        var archive=Path.Combine(Environment.CurrentDirectory,"archive",name);
+        var final=Path.Combine(Environment.CurrentDirectory,"local",name);
+        if(!File.Exists(final))throw new Exception("Archiving before the Windows file was published.");
+        try { File.Move(Path.Combine(remote,name),archive,overwrite:false); }
+        catch(IOException ex){Console.Error.WriteLine(ex.Message);Environment.ExitCode=1;}
+        return;
+    }
     if(script.Contains("find ")) {
         foreach(var file in Directory.GetFiles(remote,args[^1])) Console.Write($"/incoming/{Path.GetFileName(file)}\0{Stamp(file)}\0");
     } else if(!script.StartsWith("command -v")) {
         var file=Path.Combine(remote,Path.GetFileName(args[^1]));
-        if(script.Contains("sha256sum"))Console.WriteLine(Path.GetFileName(file)=="bad.csv"?new string('0',64):Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
+        if(script.Contains("sha256sum"))Console.WriteLine(Path.GetFileName(file).EndsWith("bad.csv")?new string('0',64):Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
         else if(script.Contains("stat -c"))Console.WriteLine(Stamp(file));
         else if(script.Contains("cat --")) {
             if(Path.GetFileName(file)=="cancel.csv")await Task.Delay(30000);
@@ -77,5 +87,28 @@ try {
     try{await uploading;}catch(OperationCanceledException){}
     Check(File.ReadAllText(Path.Combine(remoteDir,"legacy.csv"))=="legacy upload","Legacy upload did not arrive.");
     Console.WriteLine("Legacy upload regression passed.");
+    var archiveDir=Directory.CreateDirectory(Path.Combine(root,"archive")).FullName;
+    File.WriteAllText(Path.Combine(remoteDir,"archive-new.csv"),"move after verification");
+    File.WriteAllText(Path.Combine(remoteDir,"archive-clash.csv"),"retain remote on collision");
+    File.WriteAllText(Path.Combine(remoteDir,"archive-skip.csv"),"retain remote on skip");
+    File.WriteAllText(Path.Combine(archiveDir,"archive-clash.csv"),"existing archive");
+    File.WriteAllText(Path.Combine(localDir,"archive-skip.csv"),"existing Windows copy");
+    File.WriteAllText(Path.Combine(remoteDir,"archive-bad.csv"),"invalid hash");
+    job.Pattern="archive-*.csv";
+    job.CompletionAction="RemoteArchive";
+    job.ArchiveDirectory="/archive";
+    job.VerifySha256=false; // Archive policy must still hash.
+    rows.Clear();
+    using var archiveStop=new CancellationTokenSource(TimeSpan.FromSeconds(25));
+    var archiver=new FolderDownloadRunner(job,client,Console.WriteLine,row=>rows[row.Name]=row,Path.Combine(root,"archive-receipts.json"));
+    var archiving=archiver.Run(archiveStop.Token);
+    while(rows.Count<4||rows.Values.Any(x=>x.CanCancel))await Task.Delay(50,archiveStop.Token);
+    archiveStop.Cancel();
+    try{await archiving;}catch(OperationCanceledException){}
+    Check(!File.Exists(Path.Combine(remoteDir,"archive-new.csv"))&&File.ReadAllText(Path.Combine(archiveDir,"archive-new.csv"))=="move after verification","Verified remote source was not archived.");
+    Check(File.ReadAllText(Path.Combine(archiveDir,"archive-clash.csv"))=="existing archive"&&File.ReadAllText(Path.Combine(remoteDir,"archive-clash.csv"))=="retain remote on collision","Archive collision changed the source or destination.");
+    Check(File.ReadAllText(Path.Combine(remoteDir,"archive-skip.csv"))=="retain remote on skip"&&!File.Exists(Path.Combine(archiveDir,"archive-skip.csv")),"Skipped download archived its source.");
+    Check(rows["archive-bad.csv"].State=="Failed"&&File.Exists(Path.Combine(remoteDir,"archive-bad.csv"))&&!File.Exists(Path.Combine(archiveDir,"archive-bad.csv")),"Archive moved an unverified source.");
+    Console.WriteLine("Remote archive checks passed: successful move, no overwrite, skipped source retained.");
     Console.WriteLine("Download checks passed: verified copy, skip, bad hash, cancel, temporary cleanup, remote retention, restart deduplication.");
 } finally { if(Path.GetDirectoryName(Path.GetFullPath(root))==Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory)))Directory.Delete(root,true); }

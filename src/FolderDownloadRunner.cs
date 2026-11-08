@@ -27,7 +27,9 @@ public sealed class FolderDownloadRunner(AutomationJob job, AutomationClient cli
         if (new[]{job.Project,job.Pod,job.Container}.Any(string.IsNullOrWhiteSpace)) throw new IOException("Select a namespace, pod, and container.");
         if (string.IsNullOrWhiteSpace(job.Pattern) || job.Pattern.IndexOfAny(['/', '\\', '\0']) >= 0) throw new IOException("Enter a filename pattern without directory separators.");
         if (job.Parallel is < 1 or > 16 || job.StableSeconds is < 1 or > 300) throw new IOException("Choose a valid stability wait and parallel file count.");
-        if (job.Recursive || job.CompletionAction != "Keep") throw new IOException("Download jobs keep remote files and scan only the selected directory.");
+        if (job.Recursive || job.CompletionAction is not ("Keep" or "RemoteArchive")) throw new IOException("Choose a supported download completion policy.");
+        if (job.CompletionAction == "RemoteArchive" && (!job.ArchiveDirectory.StartsWith('/') || job.ArchiveDirectory.Contains('\0')))
+            throw new IOException("Enter an absolute directory for the remote archive.");
     }
 
     Task<string> Remote(CancellationToken token, string script, params string[] arguments) =>
@@ -56,9 +58,39 @@ public sealed class FolderDownloadRunner(AutomationJob job, AutomationClient cli
     public async Task Test(CancellationToken token) {
         Validate(job);
         await Scan(token);
-        await Remote(token, job.VerifySha256 ? "command -v cat >/dev/null && command -v sha256sum >/dev/null" : "command -v cat >/dev/null");
+        await Remote(token, RequiresHash(job) ? "command -v cat >/dev/null && command -v sha256sum >/dev/null" : "command -v cat >/dev/null");
+        if (job.CompletionAction == "RemoteArchive") await CheckArchive(token);
         using var probe = new FileStream(TemporaryPath(), FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.DeleteOnClose);
     }
+
+    internal static bool RequiresHash(AutomationJob job) => job.VerifySha256 || job.CompletionAction=="RemoteArchive";
+
+    // Resolve symlinks before checking the directory boundary. Never create a remote directory implicitly.
+    const string ArchiveDirectories = """
+        source_dir=$(CDPATH= cd -P -- "$1" && pwd -P) &&
+        archive_dir=$(CDPATH= cd -P -- "$2" && pwd -P) ||
+            { echo 'The source and archive directories must exist' >&2; exit 1; }
+        case "$archive_dir/" in "$source_dir/"*|"$source_dir") echo 'Archive must be outside the watched folder' >&2; exit 1;; esac
+        test "$source_dir" != / && test "$archive_dir" != / &&
+        test -w "$source_dir" && test -w "$archive_dir" && test -x "$archive_dir" ||
+            { echo 'Use separate writable source and archive directories' >&2; exit 1; }
+        test "$(stat -c %d -- "$source_dir")" = "$(stat -c %d -- "$archive_dir")" ||
+            { echo 'Archive must be on the same filesystem' >&2; exit 1; }
+        """;
+
+    Task<string> CheckArchive(CancellationToken token) => Remote(token, ArchiveDirectories + "\n" + """
+        mv --no-copy --update=none-fail -T --help >/dev/null 2>&1 ||
+            { echo 'Remote archive requires mv with --no-copy and --update=none-fail support' >&2; exit 1; }
+        """, job.Destination,job.ArchiveDirectory);
+
+    Task<string> Archive(RemoteFile file,string name,CancellationToken token) => Remote(token, ArchiveDirectories + "\n" + """
+        source="$source_dir/$3"
+        target="$archive_dir/$3"
+        test -f "$source" && test ! -L "$source" &&
+        test "$(stat -c '%s:%i:%y:%z' -- "$source")" = "$4" ||
+            { echo 'Remote source changed; not archiving' >&2; exit 1; }
+        mv --no-copy --update=none-fail -T -- "$source" "$target"
+        """, job.Destination,job.ArchiveDirectory,name,file.Stamp);
 
     string TemporaryPath() => Path.Combine(job.Source, ".winocp-" + Guid.NewGuid().ToString("N") + ".part");
     string Key(string path) => JsonSerializer.Serialize(new[]{job.Cluster,job.Project,job.Pod,job.Container,job.Source,path});
@@ -116,7 +148,7 @@ public sealed class FolderDownloadRunner(AutomationJob job, AutomationClient cli
                 hash=await client.Download(job,file.Path,output,row,token);
             }
             if (row.Bytes!=file.Size) throw new IOException("Downloaded size does not match the remote file.");
-            if (job.VerifySha256) {
+            if (RequiresHash(job)) {
                 var remoteHash=(await Remote(token,"sha256sum < \"$1\"",file.Path)).Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
                 if (!string.Equals(hash,remoteHash,StringComparison.OrdinalIgnoreCase)) throw new IOException("Downloaded SHA-256 does not match the remote file.");
             }
@@ -126,6 +158,10 @@ public sealed class FolderDownloadRunner(AutomationJob job, AutomationClient cli
             try { File.Move(temporary,target,overwrite:false); }
             catch (IOException) when (File.Exists(target) || Directory.Exists(target)) { row.Finish("Skipped"); return; }
             ownsTemporary=false;
+            if (job.CompletionAction=="RemoteArchive" && !token.IsCancellationRequested) {
+                try { await Archive(file,name,token); log("Archived remote source: "+file.Path); }
+                catch (Exception ex) { log("Warning: Windows copy verified and saved; remote archive could not be confirmed: "+ex.Message); }
+            }
             row.Finish("Completed");
             receipts[Key(file.Path)]=file.Stamp;
             try {

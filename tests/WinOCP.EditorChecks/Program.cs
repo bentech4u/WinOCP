@@ -24,6 +24,11 @@ static class Checks {
             typeof(AutomationWindow).GetMethod("SaveCurrent",flags)!.Invoke(window,null);
             var persisted=AutomationStore.Load(settings);
             Assert(persisted.Count==3&&persisted.Single(x=>x.Download).CompletionAction=="Keep"&&persisted.Single(x=>x.Name=="One").Source==AppContext.BaseDirectory,"Saving a download affected existing upload configuration");
+            ((ComboBox)window.FindName("DownloadCompletionAction")).SelectedIndex=1;
+            ((TextBox)window.FindName("RemoteArchiveDirectory")).Text="/archive";
+            typeof(AutomationWindow).GetMethod("SaveCurrent",flags)!.Invoke(window,null);
+            var archived=AutomationStore.Load(settings).Single(x=>x.Download);
+            Assert(archived.CompletionAction=="RemoteArchive"&&archived.ArchiveDirectory=="/archive","Download archive policy did not persist");
             list.SelectedItem=jobs[0];Assert(((TextBlock)window.FindName("RemoteHeading")).Text=="Destination — OpenShift","Switching back did not restore the upload editor");
             ((TextBox)window.FindName("ArchiveDirectory")).Text=Path.Combine(AppContext.BaseDirectory,"archive");bool closed=false;window.Closed+=(_,_)=>closed=true;choice=UnsavedChoice.Cancel;window.Close();Assert(!closed,"Cancel did not prevent close");choice=UnsavedChoice.Discard;window.Close();Assert(closed,"Discard did not allow close");window=null;
             Console.WriteLine("Editor checks passed: clean initialization, switch Save/Discard/Cancel, validation failure, draft discard, Completion edits, and close cancellation.");
