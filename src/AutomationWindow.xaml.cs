@@ -54,7 +54,7 @@ public partial class AutomationWindow : Window {
         VerificationHint.Text=download?"Verify before placing the final Windows file. SHA-256 requires sha256sum in the container; otherwise file size and remote metadata are checked.":"Compares the uploaded bytes with the remote file contents before recording success. Requires sha256sum inside the container. When unchecked, only file size is verified.";
     }
     void ShowNewJob(object s,RoutedEventArgs e) {
-        var menu=new ContextMenu{PlacementTarget=(Button)s,Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom};
+        var menu=new ContextMenu{Style=(Style)FindResource("NewJobMenuStyle"),ItemContainerStyle=(Style)FindResource("NewJobMenuItemStyle"),PlacementTarget=(Button)s,Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom};
         var upload=new MenuItem{Header="Upload to OpenShift"};
         var download=new MenuItem{Header="Download from OpenShift"};
         upload.Click+=(_,_)=>CreateJob(false);download.Click+=(_,_)=>CreateJob(true);
