@@ -3,6 +3,7 @@ using System.Text.Json;
 namespace WinOCP;
 public sealed class AutomationJob {
     public string Id {get;set;}=Guid.NewGuid().ToString("N");
+    public bool Download {get;set;}
     public string CompletionAction {get;set;}="Keep";
     public string ArchiveDirectory {get;set;}="";
     public bool VerifySha256 {get;set;}=true;
@@ -19,7 +20,7 @@ public sealed class AutomationJob {
     public int StableSeconds {get;set;}=10;
     public bool Recursive {get;set;}
 }
-public sealed class FolderUploadRunner {
+public sealed class FolderUploadRunner : IAutomationRunner {
     readonly AutomationJob job;
     readonly AutomationClient client;
     readonly Action<string> log;

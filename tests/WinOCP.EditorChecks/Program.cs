@@ -19,6 +19,12 @@ static class Checks {
             description.Text="Saved notes";choice=UnsavedChoice.Save;list.SelectedItem=jobs[0];Assert(AutomationStore.Load(settings).Single(x=>x.Name=="Two").Description=="Saved notes","Save-before-switch did not persist edits");
             source.Text="";list.SelectedItem=jobs[1];Assert(list.SelectedItem==jobs[0]&&source.Text=="","Validation failure switched job or lost edits");
             choice=UnsavedChoice.Discard;typeof(AutomationWindow).GetMethod("NewJob",flags)!.Invoke(window,new object[]{window,new RoutedEventArgs()});Assert(jobs.Count==3,"New job failed");list.SelectedItem=jobs[0];Assert(jobs.Count==2,"Discard left an unsaved draft in the job list");
+            typeof(AutomationWindow).GetMethod("CreateJob",flags)!.Invoke(window,new object[]{true});
+            Assert(jobs.Count==3&&jobs[2].Job.Download&&((TextBlock)window.FindName("RemoteHeading")).Text=="Source — OpenShift","Download editor did not show the OpenShift source");
+            typeof(AutomationWindow).GetMethod("SaveCurrent",flags)!.Invoke(window,null);
+            var persisted=AutomationStore.Load(settings);
+            Assert(persisted.Count==3&&persisted.Single(x=>x.Download).CompletionAction=="Keep"&&persisted.Single(x=>x.Name=="One").Source==AppContext.BaseDirectory,"Saving a download affected existing upload configuration");
+            list.SelectedItem=jobs[0];Assert(((TextBlock)window.FindName("RemoteHeading")).Text=="Destination — OpenShift","Switching back did not restore the upload editor");
             ((TextBox)window.FindName("ArchiveDirectory")).Text=Path.Combine(AppContext.BaseDirectory,"archive");bool closed=false;window.Closed+=(_,_)=>closed=true;choice=UnsavedChoice.Cancel;window.Close();Assert(!closed,"Cancel did not prevent close");choice=UnsavedChoice.Discard;window.Close();Assert(closed,"Discard did not allow close");window=null;
             Console.WriteLine("Editor checks passed: clean initialization, switch Save/Discard/Cancel, validation failure, draft discard, Completion edits, and close cancellation.");
         }finally{if(window!=null){window.UnsavedPrompt=_=>UnsavedChoice.Discard;window.Close();}if(File.Exists(settings))File.Delete(settings);if(File.Exists(history))File.Delete(history);app.Shutdown();}

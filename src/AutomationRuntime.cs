@@ -9,11 +9,11 @@ public sealed class AutomationRuntime : INotifyPropertyChanged {
     public string State {get=>state;set{state=value;Changed();}}
     public string StateColor=>State switch{"Running"=>"#22C55E","Error"=>"#F87171","Paused"=>"#FACC15",_=>"#94A3B8"};
     public string Name=>Job.Name;
-    public string Summary=>$"{Job.Pattern} → {Job.Pod}";
+    public string Summary=>Job.Download?$"Download · {Job.Pattern} → {Job.Source}":$"{Job.Pattern} → {Job.Pod}";
     public ObservableCollection<TransferItem> Transfers {get;}=new();
     public ObservableCollection<AutomationLog> Logs {get;}=new();
     public CancellationTokenSource? Stop {get;set;}
-    public FolderUploadRunner? Runner {get;set;}
+    public IAutomationRunner? Runner {get;set;}
     public Task? Task {get;set;}
     public bool Running=>Stop!=null;
     public void Changed(){foreach(var name in new[]{nameof(Name),nameof(Summary),nameof(State),nameof(StateColor),nameof(Running)})PropertyChanged?.Invoke(this,new(name));}

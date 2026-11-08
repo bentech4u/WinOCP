@@ -28,4 +28,25 @@ public sealed class AutomationClient(string cli,string config,string home,bool s
             if(!long.TryParse(size.Trim(),out var length)||length!=bytes)throw new IOException("Destination size verification failed.");            if(verifyHash){var localHash=Convert.ToHexString(hash.GetHashAndReset());var remote=await Query(token,"exec","-n",project,pod,"-c",container,"--","sh","-c","sha256sum < \"$1\"","sh",target);var remoteHash=remote.Trim().Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();if(!string.Equals(localHash,remoteHash,StringComparison.OrdinalIgnoreCase))throw new IOException("Destination SHA-256 verification failed.");}
         }catch{try{p.Kill(true);}catch{}token.ThrowIfCancellationRequested();throw;}
     }
+    public async Task<string> Download(AutomationJob job,string path,Stream destination,TransferItem row,CancellationToken token) {
+        token.ThrowIfCancellationRequested();
+        using var p=Start(["exec","-n",job.Project,job.Pod,"-c",job.Container,"--","sh","-c","test -f \"$1\" && test ! -L \"$1\" && cat -- \"$1\"","sh",path]);
+        p.StandardInput.Close();
+        using var cancel=token.Register(()=>{try{p.Kill(true);}catch{}});
+        var errors=p.StandardError.ReadToEndAsync();
+        using var hash=job.VerifySha256?IncrementalHash.CreateHash(HashAlgorithmName.SHA256):null;
+        try {
+            var buffer=new byte[131072];long bytes=0;var clock=Stopwatch.StartNew();int count;
+            while ((count=await p.StandardOutput.BaseStream.ReadAsync(buffer,token))>0) {
+                if(bytes+count>row.Total) throw new IOException("Remote file grew during download.");
+                await destination.WriteAsync(buffer.AsMemory(0,count),token);hash?.AppendData(buffer,0,count);bytes+=count;
+                if(clock.ElapsedMilliseconds>=100){row.Update(bytes);clock.Restart();}
+            }
+            await p.WaitForExitAsync(token);var error=await errors;
+            token.ThrowIfCancellationRequested();
+            if(p.ExitCode!=0)throw new IOException(error.Trim());
+            await destination.FlushAsync(token);row.Update(bytes);
+            return hash==null?"":Convert.ToHexString(hash.GetHashAndReset());
+        } catch {try{p.Kill(true);}catch{} token.ThrowIfCancellationRequested();throw;}
+    }
 }

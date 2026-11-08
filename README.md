@@ -111,3 +111,11 @@ When updating portable WinOCP, preserve connections.vault, automation.json, auto
 Unsaved configuration changes prompt with Save, Discard, or Cancel before switching Automation jobs, creating another job, or closing Automation. Completion changes are included. Save validates and preserves the current editor if validation or writing fails; Discard restores saved values and removes unsaved new drafts. Connection Manager uses the same themed choices when switching sites, creating a site, or closing its editor.
 
 Manual uploads and downloads ask when a destination already exists. Choose Skip existing or Replace, optionally applying the choice to remaining conflicts in that batch. Ask is reset for each batch; new destinations transfer without an overwrite prompt. Existing folders are merged only after a Replace choice. Skipped entries appear in transfer history and can be cleared. Automation overwrite behavior is unchanged.
+
+### Automated downloads from OpenShift
+
+In **Automation → + New Job**, choose **Download from OpenShift**. Select the namespace, pod, container, remote source directory (use the PVC mount path if applicable), filename pattern, and an existing Windows destination directory. **Test configuration** checks remote listing and required tools and probes local write access with a temporary file. Existing jobs remain uploads.
+
+Downloads scan one remote directory and wait for file metadata to stabilize. For a reliable handoff, have the producer write under a temporary name that does not match the job pattern, then rename the completed file. The container needs sh, find, stat, and cat; SHA-256 verification also needs sha256sum. WinOCP checks file size and remote metadata before publishing, with SHA-256 enabled by default.
+
+Remote files are kept. Existing Windows files are skipped, even if a destination appears while a download is running. WinOCP writes a temporary .part file and publishes it under its final name only after verification. Download receipts are separate from upload receipts and prevent completed files from downloading again after a restart. A restarted pod with a new name requires updating the job destination selection.

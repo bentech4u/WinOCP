@@ -20,7 +20,7 @@ public sealed class TransferItem : INotifyPropertyChanged {
     readonly Stopwatch watch = new();
     public CancellationTokenSource Cancellation { get; } = new();
     public TransferItem(string name, bool upload, string sourcePath = "") { SourcePath = sourcePath; Name = name; Direction = upload ? "Upload →" : "← Download"; }
-    public static TransferItem Restore(string name,string source,long? total,long bytes,string state,DateTime created,DateTime? started,DateTime? completed) { var row=new TransferItem(name,true,source){Total=total,Bytes=bytes,State=state,Created=created,Started=started,Completed=completed};return row; }
+    public static TransferItem Restore(string name,string source,long? total,long bytes,string state,DateTime created,DateTime? started,DateTime? completed,bool upload=true) { var row=new TransferItem(name,upload,source){Total=total,Bytes=bytes,State=state,Created=created,Started=started,Completed=completed};return row; }
     public void Prepare(long? total){Total=total;Notify();}
     public void Start(long? total) { Total = total; State = "Transferring"; Bytes = 0; Started ??= DateTime.Now; watch.Restart(); Notify(); }
     public void Update(long bytes) { Bytes = bytes; Notify(false); }
